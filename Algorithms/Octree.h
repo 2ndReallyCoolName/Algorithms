@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <iostream>
+#include <cmath>
 
 int h =5 , w = 5, d = 5;
 
@@ -113,7 +114,7 @@ void insert(std::vector<float>& p, Node* n) {
 		insert(p, n->children[pos]);
 	}
 	else {
-		std::vector<float> lp = *n->children[pos]->point;
+		std::vector<float>* lp = n->children[pos]->point;
 		delete n->children[pos];
 		switch (pos) {
 		case TopLeftFront:
@@ -144,12 +145,71 @@ void insert(std::vector<float>& p, Node* n) {
 			std::cout << "Weird result" << std::endl;
 			return;
 		}
+		insert(*lp, n->children[pos]);
 		insert(p, n->children[pos]);
 	}
 }
 
-void printTree(Node* n, std::string acc) {
+void printNode(Node* n) {
+	std::cout << n->name + " " + n->type;
+	if (n->type == "internal") {
+		std::cout << "(" + std::to_string(n->topLeftFront[0]) + "," + std::to_string(n->topLeftFront[1]) + "," + std::to_string(n->topLeftFront[2]) << ")";
+		std::cout << "(" + std::to_string(n->bottomRightBack[0]) + "," + std::to_string(n->bottomRightBack[1]) + "," + std::to_string(n->bottomRightBack[2]) << ")" << std::endl;
+	}
+	else {
+		std::cout << std::endl;
+	}
+}
 
+void printPoint(std::vector<float>* p, int size) {
+	std::cout << "( ";
+	for (int i = 0; i < size-1; i++) {
+		std::cout << p->at(i) << ", ";
+	}
+	std::cout << p->at(size - 1) << " )" << std::endl;
+}
+
+bool isEqual(float a, float b, float epsilon = 0.00001f) {
+	return std::fabs(a - b) <= epsilon;
+}
+
+bool compare(std::vector<float>* p1, std::vector<float>* p2) {
+	if (p1 == nullptr || p2 == nullptr) return false;
+
+	return (isEqual(p1->at(0), p2->at(0)) && isEqual(p1->at(1), p2->at(1))  && isEqual(p1->at(2), p2->at(2)));
+}
+
+
+
+Node* search(Node* n, std::vector<float>* p){
+
+	if (n->type == "leaf") {
+		if (compare(n->point, p)) {
+			return n;
+		}
+		else {
+			return nullptr;
+		}
+	}
+	for (Node* child : n->children) {
+		if(child->type == "internal"){
+			if (p->at(0) >= child->topLeftFront[0] && p->at(0) <= child->bottomRightBack[0] &&
+				p->at(1) >= child->bottomRightBack[1] && p->at(1) <= child->topLeftFront[1] &&
+				p->at(2) >= child->bottomRightBack[2] && p->at(2) <= child->topLeftFront[2]) {
+				return search(child, p);
+			}
+		}
+		else {
+
+			if (child->point != nullptr && compare(p, child->point)) {
+				return child;
+			}
+		}
+	}
+	return nullptr;
+}
+
+void printTree(Node* n, std::string acc) {
 
 	std::cout << acc + " " + n->name + " " + n->type;
 	if (n->type == "internal") {
@@ -159,8 +219,14 @@ void printTree(Node* n, std::string acc) {
 		std::cout << "(" + std::to_string(p[0]) + "," + std::to_string(p[1]) + "," + std::to_string(p[2]) << ")" << ";" << std::endl;
 	}
 	if (n->point != nullptr) {
-		std::vector<float> p = *(n->point);
-		std::cout << "(" + std::to_string(p[0]) + "," + std::to_string(p[1]) + "," + std::to_string(p[2]) << ")" << std::endl;
+		std::vector<float>* p = n->point;
+		std::cout << "(";
+		for (int i = 0; i < p->size(); i++) {
+			std::cout << p->at(i) << ",";
+		}
+		std::cout << ")" << std::endl;
+		/*std::cout << "(" + std::to_string(p->at(0)) + "," + std::to_string(p->at(1)) + "," + std::to_string(p->at(2)) << ")" << std::endl;*/
+		return;
 	}
 	else {
 		std::cout << std::endl;
@@ -169,3 +235,4 @@ void printTree(Node* n, std::string acc) {
 		printTree(child, acc + "-");
 	}
 }
+
