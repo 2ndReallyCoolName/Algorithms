@@ -50,15 +50,6 @@ struct Node {
 };
 
 
-Node root = {
-	nullptr, // parent
-	"0", // name,
-	nullptr, // point
-	std::vector<float>({(float)-w, (float)h, (float)d}), // topLeftFront
-	std::vector<float>({(float)w, (float)-h, (float)-d}), // bottomRightBack
-};
-
-
 void insert(std::vector<float>& p, Node* n) {
 	
 	float x = (n->topLeftFront[0] + n->bottomRightBack[0]) / 2;
@@ -209,6 +200,15 @@ Node* search(Node* n, std::vector<float>* p){
 	return nullptr;
 }
 
+
+void remove(std::vector<float>& p, Node* n) {
+	Node* target = search(n, &p);
+	if (target != nullptr) {
+		target->point = nullptr;
+	}
+}
+
+
 void printTree(Node* n, std::string acc) {
 
 	std::cout << acc + " " + n->name + " " + n->type;
@@ -225,7 +225,6 @@ void printTree(Node* n, std::string acc) {
 			std::cout << p->at(i) << ",";
 		}
 		std::cout << ")" << std::endl;
-		/*std::cout << "(" + std::to_string(p->at(0)) + "," + std::to_string(p->at(1)) + "," + std::to_string(p->at(2)) << ")" << std::endl;*/
 		return;
 	}
 	else {

@@ -9,12 +9,19 @@ void Test(Node* n, std::vector<float>* v);
 
 int main()
 {
+	Node root = {
+		nullptr, // parent
+		"0", // name,
+		nullptr, // point
+		std::vector<float>({(float)-w, (float)h, (float)d}), // topLeftFront
+		std::vector<float>({(float)w, (float)-h, (float)-d}), // bottomRightBack
+	};
+
 	std::vector<std::vector<float>> points = { {0,0,0}, {1,0,0}, {1,1,0}, {-1,-1,0}, {-1,-1,-1}, {1,2,0}, {1,4,0}, {1,3,0}, {-1,-1,4}, {-1,-4,-1}, {0,1,2}, {1,2,2}, {1,2, 3}, {-2,-2,0}, {-2,-1,-1} , {2.3, 0.4, 3.4} };
 	std::cout << root.name << std::endl;
 
 	for (int i = 0; i < points.size(); i++) {
 		insert(points[i], &root);
-		std::cout << "----------------------------------------------" << std::endl;
 	}
 	printTree(&root, "");
 
@@ -28,6 +35,11 @@ int main()
 	p = { -1,1,2 };
 	Test(&root, &p);
 	p = { 0.2, 0 , 2 };
+	Test(&root, &p);
+
+	p = { -1,-1,-1 };
+	remove(p, &root);
+	printTree(&root, "");
 	Test(&root, &p);
 
 	return 0;
