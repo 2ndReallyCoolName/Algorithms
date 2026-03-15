@@ -35,8 +35,13 @@ struct Oct3Node {
 
 	void remove_child(Oct3Node* child) {
 		child->parent = nullptr;
-		children.erase(std::remove(children.begin(), children.end(), child), children.end());
-		numChildren--;
+		for (int i = 0; i < children.size(); i++) {
+			if (children[i] == child) {
+				children[i] = nullptr;
+				numChildren--;
+				return;
+			}
+		}
 	}
 
 	void remove_child(int index) {
@@ -66,6 +71,7 @@ struct Oct3Node {
 		if (pos.empty()) {
 			std::cout << "  topLeftFront: (" << topLeftFront[0] << ", " << topLeftFront[1] << ", " << topLeftFront[2] << ") " << std::endl;
 			std::cout << "  bottomRightBack: (" << bottomRightBack[0] << ", " << bottomRightBack[1] << ", " << bottomRightBack[2] << ") " << std::endl;
+			std::cout << " num children: " << numChildren << std::endl;
 		}
 		else {
 			std::cout << "pos: (" << pos[0] << ", " << pos[1] << ", " << pos[2] << ") " << std::endl;
@@ -77,6 +83,7 @@ struct Oct3Node {
 				std::cout << std::endl;
 				std::cout << "  topLeftFront: (" << parent->topLeftFront[0] << ", " << parent->topLeftFront[1] << ", " << parent->topLeftFront[2] << ") " << std::endl;
 				std::cout << "  bottomRightBack: (" << parent->bottomRightBack[0] << ", " << parent->bottomRightBack[1] << ", " << parent->bottomRightBack[2] << ") " << std::endl;
+				std::cout << "  num children: " << parent->numChildren << std::endl;
 				for (int i = 0; i < parent->children.size(); i++) {
 					if (parent->children[i] == this) {
 						std::cout << "  child pos: " << i <<  std::endl;
@@ -115,19 +122,38 @@ public:
 		insertNode(root, new Oct3Node(x, y, z, nullptr));
 	}
 
-	void insert(std::vector<float> point) {
+	void insert(std::vector<float>& point) {
 		insertNode(root, new Oct3Node(point[0], point[1], point[2], nullptr));
+	}
+
+	void remove(float x, float y, float z) {
+		std::vector<float> pos = { x, y, z };
+		Oct3Node* node = this->search(&pos);
+		if (node == nullptr) {
+			std::cout << "Point not found in tree" << std::endl;
+			return;
+		}
+		removeNode(node);
+	}
+
+	void remove(std::vector<float>& point) {
+		Oct3Node* node = this->search(&point);
+		if (node == nullptr) {
+			std::cout << "Point not found in tree" << std::endl;
+			return;
+		}
+		removeNode(node);
 	}
 
 	void printTree() {
 		root->print();
 	}
 
-	bool search(Oct3Node* node) {
-		this->search(node, root);
+	Oct3Node* search(Oct3Node* node) {
+		return this->search(node, root);
 	}
 
-	bool search(std::vector<float> *p) {
+	Oct3Node* search(std::vector<float> *p) {
 		Oct3Node node(p->at(0), p->at(1), p->at(2), nullptr);
 
 		return this->search(&node, root);
@@ -143,12 +169,11 @@ private:
 		delete n;
 	}
 
-	void insertNode(Oct3Node* treeNode, Oct3Node* node) {
+	int getIndex(Oct3Node* treeNode, Oct3Node* node) {
 		int index = 0;
 		float midX = (treeNode->topLeftFront[0] + treeNode->bottomRightBack[0]) / 2;
 		float midY = (treeNode->topLeftFront[1] + treeNode->bottomRightBack[1]) / 2;
 		float midZ = (treeNode->topLeftFront[2] + treeNode->bottomRightBack[2]) / 2;
-
 		if (node->pos[0] < midX) {
 			if (node->pos[1] < midY) {
 				if (node->pos[2] < midZ) {
@@ -185,6 +210,28 @@ private:
 				}
 			}
 		}
+		return index;
+	}
+
+	void removeNode(Oct3Node* node) {
+		if (node == nullptr) {
+			return;
+		}
+		Oct3Node* parent = node->parent;
+		while (parent != nullptr) {
+			parent->remove_child(node);
+			delete node;
+			if (parent->numChildren > 0) {
+				break;
+			}
+			node = parent;
+			parent = node->parent;
+		}
+	}
+
+
+	void insertNode(Oct3Node* treeNode, Oct3Node* node) {
+		int index = getIndex(treeNode, node);
 
 		if (treeNode->children[index] == nullptr) {
 			treeNode->add_child(node, index);
@@ -193,6 +240,9 @@ private:
 			if (!treeNode->children[index]->pos.empty()) {
 				Oct3Node* existingNode = treeNode->children.at(index);
 				treeNode->remove_child(index);
+				float midX = (treeNode->topLeftFront[0] + treeNode->bottomRightBack[0]) / 2;
+				float midY = (treeNode->topLeftFront[1] + treeNode->bottomRightBack[1]) / 2;
+				float midZ = (treeNode->topLeftFront[2] + treeNode->bottomRightBack[2]) / 2;
 				switch (index)
 				{
 				case OCT3_TOP_LEFT_FRONT:
@@ -228,58 +278,17 @@ private:
 		}
 	}
 
-	bool search(Oct3Node* node, Oct3Node* treeNode) {
+	Oct3Node* search(Oct3Node* node, Oct3Node* treeNode) {
 		if (treeNode == nullptr) {
-			return false;
+			return nullptr;
 		}
 		if (treeNode->pos == node->pos) {
-			return true;
+			return treeNode;
 		}else if(!treeNode->pos.empty()) {
-			return false;
+			return nullptr;
 		}
 
-		int index = 0;
-		float midX = (treeNode->topLeftFront[0] + treeNode->bottomRightBack[0]) / 2;
-		float midY = (treeNode->topLeftFront[1] + treeNode->bottomRightBack[1]) / 2;
-		float midZ = (treeNode->topLeftFront[2] + treeNode->bottomRightBack[2]) / 2;
-
-		if (node->pos[0] < midX) {
-			if (node->pos[1] < midY) {
-				if (node->pos[2] < midZ) {
-					index = OCT3_TOP_LEFT_FRONT;
-				}
-				else {
-					index = OCT3_TOP_LEFT_BACK;
-				}
-			}
-			else {
-				if (node->pos[2] < midZ) {
-					index = OCT3_BOTTOM_LEFT_FRONT;
-				}
-				else {
-					index = OCT3_BOTTOM_LEFT_BACK;
-				}
-			}
-		}
-		else {
-			if (node->pos[1] < midY) {
-				if (node->pos[2] < midZ) {
-					index = OCT3_TOP_RIGHT_FRONT;
-				}
-				else {
-					index = OCT3_TOP_RIGHT_BACK;
-				}
-			}
-			else {
-				if (node->pos[2] < midZ) {
-					index = OCT3_BOTTOM_RIGHT_FRONT;
-				}
-				else {
-					index = OCT3_BOTTOM_RIGHT_BACK;
-				}
-			}
-		}
-
+		int index = getIndex(treeNode, node);
 		return search(node, treeNode->children[index]);
 	}
 

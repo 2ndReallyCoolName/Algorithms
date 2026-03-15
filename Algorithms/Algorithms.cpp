@@ -42,13 +42,26 @@ int main()
 	//printTree(&root, "");
 	//Test(&root, &p);
 
+	std::vector<std::vector<float>> points2Delete = { {0,0,0}, {1,0,0}, {-4,-1,0}, {-5,-6,-1}, {4,2,9} };
+	for (int i = 0; i < points2Delete.size(); i++) {
+		std::cout << "Delete===============================================" << std::endl;
+		std::cout << "Deleting point: (" << points2Delete[i][0] << ", " << points2Delete[i][1] << ", " << points2Delete[i][2] << ")" << std::endl;
+		tree.remove(points2Delete[i]);
+		tree.printTree();
+	}
+
+	for (std::vector<float> p : points2Delete) {
+		Test(&tree, &p);
+		std::cout << "----------------------------------------------" << std::endl;
+	}
+
 	return 0;
 }
 
 void Test(OctTree* t, std::vector<float>* p) {
 	std::cout << "Test function called" << std::endl;
 	
-	if (t->search(p)) {
+	if (t->search(p) != nullptr) {
 		std::cout << "Found point at node";
 	}
 	else {
