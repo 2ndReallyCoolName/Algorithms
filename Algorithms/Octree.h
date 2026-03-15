@@ -1,237 +1,286 @@
-#pragma once
 #include <vector>
-#include <string>
 #include <iostream>
-#include <cmath>
 
-int h =5 , w = 5, d = 5;
+#define OCT3_TOP_LEFT_FRONT 0
+#define OCT3_TOP_RIGHT_FRONT 1
+#define OCT3_BOTTOM_LEFT_FRONT 2
+#define OCT3_BOTTOM_RIGHT_FRONT 3
+#define OCT3_TOP_LEFT_BACK 4
+#define OCT3_TOP_RIGHT_BACK 5
+#define OCT3_BOTTOM_LEFT_BACK 6
+#define OCT3_BOTTOM_RIGHT_BACK 7
 
-#define TopLeftFront  0
-#define TopRightFront  1
-#define BottomLeftFront  2
-#define BottomRightFront  3
-#define TopLeftBack  4
-#define TopRightBack 5
-#define BottomLeftBack  6
-#define BottomRightBack  7
+struct Oct3Node {
+	std::vector<float> pos;
+	Oct3Node* parent;
+	std::vector<Oct3Node*> children;
+	std::vector<float>  topLeftFront;
+	std::vector<float>  bottomRightBack;
+	int numChildren = 0;
 
-
-struct Node {
-	Node* parent;
-	std::string  name;
-	std::string type;
-	std::vector<float>* point;
-	std::vector<float> topLeftFront;
-	std::vector<float> bottomRightBack;
-	std::vector<Node*> children;
-
-	Node(Node* parent) : 
-		parent(parent)
+	Oct3Node(float x, float y, float z, Oct3Node* parent) : pos{ x, y, z }, parent(parent) {
+		children.resize(8);
+	}
+	Oct3Node(float topLeftFrontX, float topLeftFrontY, float topLeftFrontZ, float bottomRightBackX, float bottomRightBackY, float bottomRightBackZ, Oct3Node* parent)
+		: parent(parent), topLeftFront({ topLeftFrontX, topLeftFrontY, topLeftFrontZ }), bottomRightBack({ bottomRightBackX, bottomRightBackY, bottomRightBackZ })
 	{
-		point = nullptr;
-		type = "leaf";
+		children.resize(8);
 	}
 
-	Node(Node* parent, std::string name, std::vector<float>* p, std::vector<float> b1, std::vector<float> b2) :
-		parent(parent), name(name), point(p), topLeftFront(b1), bottomRightBack(b2) {
-		type = "internal";
-		children.reserve(8);
-		for (int i = 0; i < 8; i++) {
-			children.push_back(new Node(this));
-			children[children.size() - 1]->name = name;
+	void add_child(Oct3Node* child, int index) {
+		child->parent = this;
+		children[index] = child;
+		numChildren++;
+	}
+
+	void remove_child(Oct3Node* child) {
+		child->parent = nullptr;
+		children.erase(std::remove(children.begin(), children.end(), child), children.end());
+		numChildren--;
+	}
+
+	void remove_child(int index) {
+		if (index >= 0 && index < children.size()) {
+			children[index] = nullptr;
+			numChildren--;
 		}
 	}
 
-	~Node() {
-		for(Node* n : children) {
-			delete n;
+	bool containsPoint(float x, float y, float z) const {
+		if (pos.empty()) {
+			return x >= topLeftFront[0] && x <= bottomRightBack[0] &&
+				y >= topLeftFront[1] && y <= bottomRightBack[1] &&
+				z >= topLeftFront[2] && z <= bottomRightBack[2];
+		}
+		else {
+			return pos[0] == x && pos[1] == y && pos[2] == z;
+		}
+	}
+
+	bool is_leaf() const {
+		return numChildren == 0;
+	}
+
+	void print() {
+		std::cout << "Node ------------------" << std::endl;
+		if (pos.empty()) {
+			std::cout << "  topLeftFront: (" << topLeftFront[0] << ", " << topLeftFront[1] << ", " << topLeftFront[2] << ") " << std::endl;
+			std::cout << "  bottomRightBack: (" << bottomRightBack[0] << ", " << bottomRightBack[1] << ", " << bottomRightBack[2] << ") " << std::endl;
+		}
+		else {
+			std::cout << "pos: (" << pos[0] << ", " << pos[1] << ", " << pos[2] << ") " << std::endl;
+		}
+		std::cout << "parent: ";
+
+		if (parent != nullptr) {
+			if (parent->pos.empty()) {
+				std::cout << std::endl;
+				std::cout << "  topLeftFront: (" << parent->topLeftFront[0] << ", " << parent->topLeftFront[1] << ", " << parent->topLeftFront[2] << ") " << std::endl;
+				std::cout << "  bottomRightBack: (" << parent->bottomRightBack[0] << ", " << parent->bottomRightBack[1] << ", " << parent->bottomRightBack[2] << ") " << std::endl;
+				for (int i = 0; i < parent->children.size(); i++) {
+					if (parent->children[i] == this) {
+						std::cout << "  child pos: " << i <<  std::endl;
+						break;
+					}
+				}
+			}
+			else {
+				std::cout << "(" << parent->pos[0] << ", " << parent->pos[1] << ", " << parent->pos[2] << ") " << std::endl;
+			}
+		}
+
+		std::cout << "------------------" << std::endl;
+		
+		for(Oct3Node* child : children) {
+			if (child != nullptr)
+				child->print();
 		}
 	}
 };
 
+class OctTree {
+private:
+	Oct3Node* root;
 
-void insert(std::vector<float>& p, Node* n) {
-	
-	float x = (n->topLeftFront[0] + n->bottomRightBack[0]) / 2;
-	float y = (n->topLeftFront[1] + n->bottomRightBack[1]) / 2;
-	float z = (n->topLeftFront[2] + n->bottomRightBack[2]) / 2;
+public:
+	OctTree(float topLeftFrontX, float topLeftFrontY, float topLeftFrontZ, float bottomRightBackX, float bottomRightBackY, float bottomRightBackZ) {
+		root =  new Oct3Node(topLeftFrontX, topLeftFrontY, topLeftFrontZ, bottomRightBackX, bottomRightBackY, bottomRightBackZ, nullptr);
+	}
 
-	int pos = -1;
-	if (p[0] >= x) {
-		if (p[1] >= y) {
-			if (p[2] >= z) {
-				pos = TopRightFront;
+	~OctTree() {
+		deallocate(root);
+	}
+
+	void insert(float x, float y, float z) {
+		insertNode(root, new Oct3Node(x, y, z, nullptr));
+	}
+
+	void insert(std::vector<float> point) {
+		insertNode(root, new Oct3Node(point[0], point[1], point[2], nullptr));
+	}
+
+	void printTree() {
+		root->print();
+	}
+
+	bool search(Oct3Node* node) {
+		this->search(node, root);
+	}
+
+	bool search(std::vector<float> *p) {
+		Oct3Node node(p->at(0), p->at(1), p->at(2), nullptr);
+
+		return this->search(&node, root);
+	}
+
+private:
+	void deallocate(Oct3Node* n) {
+		std::vector<Oct3Node*>* nodesToDelete = &n->children;
+		for (Oct3Node* child : *nodesToDelete) {
+			if(child != nullptr)
+				deallocate(child);
+		}
+		delete n;
+	}
+
+	void insertNode(Oct3Node* treeNode, Oct3Node* node) {
+		int index = 0;
+		float midX = (treeNode->topLeftFront[0] + treeNode->bottomRightBack[0]) / 2;
+		float midY = (treeNode->topLeftFront[1] + treeNode->bottomRightBack[1]) / 2;
+		float midZ = (treeNode->topLeftFront[2] + treeNode->bottomRightBack[2]) / 2;
+
+		if (node->pos[0] < midX) {
+			if (node->pos[1] < midY) {
+				if (node->pos[2] < midZ) {
+					index = OCT3_TOP_LEFT_FRONT;
+				}
+				else {
+					index = OCT3_TOP_LEFT_BACK;
+				}
 			}
 			else {
-				pos = TopRightBack;
+				if (node->pos[2] < midZ) {
+					index = OCT3_BOTTOM_LEFT_FRONT;
+				}
+				else {
+					index = OCT3_BOTTOM_LEFT_BACK;
+				}
 			}
 		}
 		else {
-			if (p[2] >= z) {
-				pos = BottomRightFront;
+			if (node->pos[1] < midY) {
+				if (node->pos[2] < midZ) {
+					index = OCT3_TOP_RIGHT_FRONT;
+				}
+				else {
+					index = OCT3_TOP_RIGHT_BACK;
+				}
 			}
 			else {
-				pos = BottomRightBack;
+				if (node->pos[2] < midZ) {
+					index = OCT3_BOTTOM_RIGHT_FRONT;
+				}
+				else {
+					index = OCT3_BOTTOM_RIGHT_BACK;
+				}
 			}
 		}
+
+		if (treeNode->children[index] == nullptr) {
+			treeNode->add_child(node, index);
+		}
+		else {
+			if (!treeNode->children[index]->pos.empty()) {
+				Oct3Node* existingNode = treeNode->children.at(index);
+				treeNode->remove_child(index);
+				switch (index)
+				{
+				case OCT3_TOP_LEFT_FRONT:
+					treeNode->add_child(new Oct3Node(treeNode->topLeftFront[0], treeNode->topLeftFront[1], treeNode->topLeftFront[2], midX, midY, midZ, treeNode), index);
+					break;
+				case OCT3_TOP_RIGHT_FRONT:
+					treeNode->add_child(new Oct3Node(midX, treeNode->topLeftFront[1], treeNode->topLeftFront[2], treeNode->bottomRightBack[0], midY, midZ, treeNode), index);
+					break;
+				case OCT3_BOTTOM_LEFT_FRONT:
+					treeNode->add_child(new Oct3Node(treeNode->topLeftFront[0], midY, treeNode->topLeftFront[2], midX, treeNode->bottomRightBack[1], midZ, treeNode), index);
+					break;
+				case OCT3_BOTTOM_RIGHT_FRONT:
+					treeNode->add_child(new Oct3Node(midX, midY, treeNode->topLeftFront[2], treeNode->bottomRightBack[0], treeNode->bottomRightBack[1], midZ, treeNode), index);
+					break;
+				case OCT3_TOP_LEFT_BACK:
+					treeNode->add_child(new Oct3Node(treeNode->topLeftFront[0], treeNode->topLeftFront[1], midZ, midX, midY, treeNode->bottomRightBack[2], treeNode), index);
+					break;
+				case OCT3_TOP_RIGHT_BACK:
+					treeNode->add_child(new Oct3Node(midX, treeNode->topLeftFront[1], midZ, treeNode->bottomRightBack[0], midY, treeNode->bottomRightBack[2], treeNode), index);
+					break;
+				case OCT3_BOTTOM_LEFT_BACK:
+					treeNode->add_child(new Oct3Node(treeNode->topLeftFront[0], midY, midZ, midX, treeNode->bottomRightBack[1], treeNode->bottomRightBack[2], treeNode), index);
+					break;
+				case OCT3_BOTTOM_RIGHT_BACK:
+					treeNode->add_child(new Oct3Node(midX, midY, midZ, treeNode->bottomRightBack[0], treeNode->bottomRightBack[1], treeNode->bottomRightBack[2], treeNode), index);
+					break;
+				default:
+					break;
+				}
+				insertNode(treeNode->children[index], existingNode);
+			}
+			insertNode(treeNode->children[index], node);
+		}
 	}
-	else {
-		if (p[1] >= y) {
-			if (p[2] >= z) {
-				pos = TopLeftFront;
+
+	bool search(Oct3Node* node, Oct3Node* treeNode) {
+		if (treeNode == nullptr) {
+			return false;
+		}
+		if (treeNode->pos == node->pos) {
+			return true;
+		}else if(!treeNode->pos.empty()) {
+			return false;
+		}
+
+		int index = 0;
+		float midX = (treeNode->topLeftFront[0] + treeNode->bottomRightBack[0]) / 2;
+		float midY = (treeNode->topLeftFront[1] + treeNode->bottomRightBack[1]) / 2;
+		float midZ = (treeNode->topLeftFront[2] + treeNode->bottomRightBack[2]) / 2;
+
+		if (node->pos[0] < midX) {
+			if (node->pos[1] < midY) {
+				if (node->pos[2] < midZ) {
+					index = OCT3_TOP_LEFT_FRONT;
+				}
+				else {
+					index = OCT3_TOP_LEFT_BACK;
+				}
 			}
 			else {
-				pos = TopLeftBack;
+				if (node->pos[2] < midZ) {
+					index = OCT3_BOTTOM_LEFT_FRONT;
+				}
+				else {
+					index = OCT3_BOTTOM_LEFT_BACK;
+				}
 			}
 		}
 		else {
-			if (p[2] >= z) {
-				pos = BottomLeftFront;
+			if (node->pos[1] < midY) {
+				if (node->pos[2] < midZ) {
+					index = OCT3_TOP_RIGHT_FRONT;
+				}
+				else {
+					index = OCT3_TOP_RIGHT_BACK;
+				}
 			}
 			else {
-				pos = BottomLeftBack;
+				if (node->pos[2] < midZ) {
+					index = OCT3_BOTTOM_RIGHT_FRONT;
+				}
+				else {
+					index = OCT3_BOTTOM_RIGHT_BACK;
+				}
 			}
 		}
+
+		return search(node, treeNode->children[index]);
 	}
 
-	// Base case
-	if (n->children[pos]->type == "leaf" && n->children[pos]->point == nullptr) {
-		n->children[pos]->point = &p;
-		n->children[pos]->name = n->name;
-		return;
-	}
-
-	if (n->children[pos]->type == "internal") {
-		insert(p, n->children[pos]);
-	}
-	else {
-		std::vector<float>* lp = n->children[pos]->point;
-		delete n->children[pos];
-		switch (pos) {
-		case TopLeftFront:
-			n->children[pos] = new Node(n, std::to_string(std::stoi(n->name)+1), nullptr, n->topLeftFront, std::vector<float>({ x, y, z}));
-			break;
-		case TopRightFront:
-			n->children[pos] = new Node(n, std::to_string(std::stoi(n->name) + 1), nullptr, std::vector<float>({ x, n->topLeftFront[1], n->topLeftFront[2] }), std::vector<float>({n->bottomRightBack[0], y, z}));
-			break;
-		case BottomLeftFront:
-			n->children[pos] = new Node(n, std::to_string(std::stoi(n->name) + 1), nullptr, std::vector<float>({n->topLeftFront[0], y, n->topLeftFront[2] }), std::vector<float>({  x, n->bottomRightBack[1], z }));
-			break;
-		case BottomRightFront:
-			n->children[pos] = new Node(n, std::to_string(std::stoi(n->name) + 1), nullptr, std::vector<float>({ x, y, n->topLeftFront[2] }), std::vector<float>({ n->bottomRightBack[0], n->bottomRightBack[1], z }));
-			break;
-		case TopLeftBack:
-			n->children[pos] = new Node(n, std::to_string(std::stoi(n->name) + 1), nullptr, std::vector<float>({ n->topLeftFront[0], n->topLeftFront[1],  z }), std::vector<float>({ x, y, n->bottomRightBack[2]}));
-			break;
-		case TopRightBack:
-			n->children[pos] = new Node(n, std::to_string(std::stoi(n->name) + 1), nullptr, std::vector<float>({ x, n->topLeftFront[1],  z }), std::vector<float>({ n->bottomRightBack[0], y, n->bottomRightBack[2] }));
-			break;
-		case BottomLeftBack:
-			n->children[pos] = new Node(n, std::to_string(std::stoi(n->name) + 1), nullptr, std::vector<float>({ n->topLeftFront[0], y,  z }), std::vector<float>({ x, n->bottomRightBack[1], n->bottomRightBack[2] }));
-			break;
-		case BottomRightBack:
-			n->children[pos] = new Node(n, std::to_string(std::stoi(n->name) + 1), nullptr, std::vector<float>({ x, y,  z }), n->bottomRightBack);
-			break;
-		default:
-			std::cout << "Weird result" << std::endl;
-			return;
-		}
-		insert(*lp, n->children[pos]);
-		insert(p, n->children[pos]);
-	}
-}
-
-void printNode(Node* n) {
-	std::cout << n->name + " " + n->type;
-	if (n->type == "internal") {
-		std::cout << "(" + std::to_string(n->topLeftFront[0]) + "," + std::to_string(n->topLeftFront[1]) + "," + std::to_string(n->topLeftFront[2]) << ")";
-		std::cout << "(" + std::to_string(n->bottomRightBack[0]) + "," + std::to_string(n->bottomRightBack[1]) + "," + std::to_string(n->bottomRightBack[2]) << ")" << std::endl;
-	}
-	else {
-		std::cout << std::endl;
-	}
-}
-
-void printPoint(std::vector<float>* p, int size) {
-	std::cout << "( ";
-	for (int i = 0; i < size-1; i++) {
-		std::cout << p->at(i) << ", ";
-	}
-	std::cout << p->at(size - 1) << " )" << std::endl;
-}
-
-bool isEqual(float a, float b, float epsilon = 0.00001f) {
-	return std::fabs(a - b) <= epsilon;
-}
-
-bool compare(std::vector<float>* p1, std::vector<float>* p2) {
-	if (p1 == nullptr || p2 == nullptr) return false;
-
-	return (isEqual(p1->at(0), p2->at(0)) && isEqual(p1->at(1), p2->at(1))  && isEqual(p1->at(2), p2->at(2)));
-}
-
-
-
-Node* search(Node* n, std::vector<float>* p){
-
-	if (n->type == "leaf") {
-		if (compare(n->point, p)) {
-			return n;
-		}
-		else {
-			return nullptr;
-		}
-	}
-	for (Node* child : n->children) {
-		if(child->type == "internal"){
-			if (p->at(0) >= child->topLeftFront[0] && p->at(0) <= child->bottomRightBack[0] &&
-				p->at(1) >= child->bottomRightBack[1] && p->at(1) <= child->topLeftFront[1] &&
-				p->at(2) >= child->bottomRightBack[2] && p->at(2) <= child->topLeftFront[2]) {
-				return search(child, p);
-			}
-		}
-		else {
-
-			if (child->point != nullptr && compare(p, child->point)) {
-				return child;
-			}
-		}
-	}
-	return nullptr;
-}
-
-
-void remove(std::vector<float>& p, Node* n) {
-	Node* target = search(n, &p);
-	if (target != nullptr) {
-		target->point = nullptr;
-	}
-}
-
-
-void printTree(Node* n, std::string acc) {
-
-	std::cout << acc + " " + n->name + " " + n->type;
-	if (n->type == "internal") {
-		std::vector<float> p = n->topLeftFront;
-		std::cout << "(" + std::to_string(p[0]) + "," + std::to_string(p[1]) + "," + std::to_string(p[2]) << ")" ;
-		p = n->bottomRightBack;
-		std::cout << "(" + std::to_string(p[0]) + "," + std::to_string(p[1]) + "," + std::to_string(p[2]) << ")" << ";" << std::endl;
-	}
-	if (n->point != nullptr) {
-		std::vector<float>* p = n->point;
-		std::cout << "(";
-		for (int i = 0; i < p->size(); i++) {
-			std::cout << p->at(i) << ",";
-		}
-		std::cout << ")" << std::endl;
-		return;
-	}
-	else {
-		std::cout << std::endl;
-	}
-	for (Node* child : n->children) {
-		printTree(child, acc + "-");
-	}
-}
-
+};

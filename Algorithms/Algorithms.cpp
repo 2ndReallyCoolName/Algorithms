@@ -4,53 +4,52 @@
 #include <iostream>
 #include "Octree.h"
 
-void Test(Node* n, std::vector<float>* v);
+void Test(OctTree* t, std::vector<float>* v);
 
 
 int main()
 {
-	Node root = {
-		nullptr, // parent
-		"0", // name,
-		nullptr, // point
-		std::vector<float>({(float)-w, (float)h, (float)d}), // topLeftFront
-		std::vector<float>({(float)w, (float)-h, (float)-d}), // bottomRightBack
-	};
+	float w = 10;
+	float h = 10;
+	float d = 10;
 
-	std::vector<std::vector<float>> points = { {0,0,0}, {1,0,0}, {1,1,0}, {-1,-1,0}, {-1,-1,-1}, {1,2,0}, {1,4,0}, {1,3,0}, {-1,-1,4}, {-1,-4,-1}, {0,1,2}, {1,2,2}, {1,2, 3}, {-2,-2,0}, {-2,-1,-1} , {2.3, 0.4, 3.4} };
-	std::cout << root.name << std::endl;
+	//std::vector<std::vector<float>> points = { {0,0,0}, {1,0,0}, {1,1,0}, {-1,-1,0}, {-1,-1,-1}, {1,2,0}, {1,4,0}, {1,3,0}, {-1,-1,4}, {-1,-4,-1}, {0,1,2}, {1,2,2}, {1,2, 3}, {-2,-2,0}, {-2,-1,-1} , {2.3, 0.4, 3.4} };
+	std::vector<std::vector<float>> points = { {0,0,0}, {1,0,0}, {1,5,0}, {-4,-1,0}, {-5,-6,-1}, {4,2,9}, {2,4,-9}, {-1,-1,0}, {-1,-1,-1}, {1,2,0}, {1,4,0}, {1,3,0}, {-1,-1,4}, {-1,-4,-1}, {0,1,2}, {1,2,2}, {1,2, 3}, {-2,-2,0}, {-2,-1,-1} , {2.3, 0.4, 3.4} };
+
+	OctTree tree(-w, -h, -d, w, h, d);
 
 	for (int i = 0; i < points.size(); i++) {
-		insert(points[i], &root);
+		tree.insert(points[i]);
 	}
-	printTree(&root, "");
+
+	tree.printTree();
+
 
 	for (std::vector<float> p : points) {
-		Test(&root, &p);
+		Test(&tree, &p);
 		std::cout << "----------------------------------------------" << std::endl;
 	}
 
 	std::vector<float> p = { 10,10,10 };
-	Test(&root, &p);
+	Test(&tree, &p);
 	p = { -1,1,2 };
-	Test(&root, &p);
+	Test(&tree, &p);
 	p = { 0.2, 0 , 2 };
-	Test(&root, &p);
+	Test(&tree, &p);
 
-	p = { -1,-1,-1 };
-	remove(p, &root);
-	printTree(&root, "");
-	Test(&root, &p);
+	//p = { -1,-1,-1 };
+	//remove(p, &root);
+	//printTree(&root, "");
+	//Test(&root, &p);
 
 	return 0;
 }
 
-void Test(Node* n, std::vector<float>* p) {
+void Test(OctTree* t, std::vector<float>* p) {
 	std::cout << "Test function called" << std::endl;
-	Node* res = search(n, p);
-	if (res != nullptr) {
-		std::cout << "Found point at node: " << res->name;
-		std::cout << " " << res->type << " " << res->point->at(0) << "," << res->point->at(1) << "," << res->point->at(2) << std::endl;
+	
+	if (t->search(p)) {
+		std::cout << "Found point at node";
 	}
 	else {
 		std::cout << "Point not found" << std::endl;
