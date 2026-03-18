@@ -1,10 +1,13 @@
 #pragma once
 #include <vector>
+#include <array>
 
 struct vec3 {
 	float x;
 	float y;
 	float z;
+
+	vec3(float x = 0, float y = 0, float z = 0) : x(x), y(y), z(z) {}
 
 	vec3 operator-(const vec3& other) const {
 		return { x - other.x, y - other.y, z - other.z };
@@ -14,11 +17,11 @@ struct vec3 {
 		return { -x, -y, -z };
 	}
 
-	vec3 dot(const vec3& other) const {
+	float dot(const vec3& other) const {
 		return x * other.x + y * other.y + z * other.z;
 	}
 
-	vec3 SameDirection(const vec3& other) const {
+	bool SameDirection(const vec3& other) const {
 		return this->dot(other) > 0;
 	}
 
@@ -29,11 +32,17 @@ struct vec3 {
 			x * other.y - y * other.x
 		};
 	}
+
+	void print() const {
+		std::cout << "  vec3(" << x << ", " << y << ", " << z << ")" << std::endl;
+	}
 };
 
 struct vec2 {
 	float x;
 	float y;
+
+	vec2(float x = 0, float y = 0) : x(x), y(y) {}
 
 	vec2 operator-(const vec2& other) const {
 		return { x - other.x, y - other.y };
@@ -43,11 +52,11 @@ struct vec2 {
 		return { -x, -y };
 	}
 
-	vec2 dot(const vec2& other) const {
+	float dot(const vec2& other) const {
 		return x * other.x + y * other.y;
 	}
 
-	vec2 SameDirection(const vec2& other) const {
+	bool SameDirection(const vec2& other) const {
 		return this->dot(other) > 0;
 	}
 
@@ -65,15 +74,21 @@ struct vec2 {
 
 struct Simplex {
 private:
-	std::array<vec3, 4> points;
+	std::vector<vec3> points;
 	int size = 0;
 public:
-	Simplex() : size(0) {}
+	Simplex() : size(0) {
+		points.resize(4);
+	}
 
-	Simplex& operator=(std::initializer_list<vec3> list) {
-		size = list.size();
-		std::copy(list.begin(), list.end(), points.begin());
+	Simplex& operator=(std::vector<vec3> v) {
+		size = v.size();
+		std::copy(v.begin(), v.end(), points.begin());
 		return *this;
+	}
+
+	size_t getSize() const {
+		return size;
 	}
 
 	void push_front(const vec3& point) {
@@ -90,10 +105,19 @@ public:
 		return points[index];
 	}
 
-	size_t size() const { return size; }
+	std::vector<vec3> getPoints() const {
+		return points;
+	}
 
 	auto begin() { return points.begin(); }
 	auto end() { return points.begin() + size; }
+
+	void print() const {
+		std::cout << "Simplex: size(" << this->size << ")" << std::endl;
+		for (int i = 0; i < size; ++i) {
+			points[i].print();
+		}
+	}
 };
 
 struct Collider {
@@ -105,6 +129,8 @@ struct MeshCollider : Collider {
 private:
 	std::vector<vec3> vertices;
 public:
+	MeshCollider(const std::vector<vec3>& vertices) : vertices(vertices) {}
+
 	vec3 FindFurthestPoint(vec3 direction) const override {
 		vec3 furthestPoint;
 		float maxDot = -FLT_MAX;
@@ -141,7 +167,7 @@ bool Line(Simplex& simplex, vec3& direction) {
 	return false;
 }
 
-bool Triange(Simplex& simplex, vec3& direction) {
+bool Triangle(Simplex& simplex, vec3& direction) {
 	vec3 a = simplex[0];
 	vec3 b = simplex[1];
 	vec3 c = simplex[2];
@@ -192,21 +218,22 @@ bool Tetrahedron(Simplex& simplex, vec3& direction) {
 	vec3 adb = ad.cross(ab);
 
 	if (abc.SameDirection(ao)) {
-		return Triange(simplex = { a, b, c }, direction);
+		return Triangle(simplex = { a, b, c }, direction);
 	}
 	if (acd.SameDirection(ao)) {
-		return Triange(simplex = { a, c, d }, direction);
+		return Triangle(simplex = { a, c, d }, direction);
 	}
 	if (adb.SameDirection(ao)) {
-		return Triange(simplex = { a, d, b }, direction);
+		return Triangle(simplex = { a, d, b }, direction);
 	}
 	return true; // Origin is inside the tetrahedron
+}
 
-bool NextSimplex(Simplex& simpler, vec3& direction) {
-	switch (points.size()) {
-		case 2: return Line(points, direction);
-		case 3: return Triangle(points, direction);
-		case 4: return Tetrahedron(points, direction);
+bool NextSimplex(Simplex& simplex, vec3& direction) {
+	switch (simplex.getSize()) {
+		case 2: return Line(simplex, direction);
+		case 3: return Triangle(simplex, direction);
+		case 4: return Tetrahedron(simplex, direction);
 	}
 	return false;
 }
@@ -223,10 +250,12 @@ bool GJK(const Collider& colliderA, const Collider& colliderB) {
 
 	while (true) {
 		support = Support(colliderA, colliderB, direction);
-		if (dot(support, direction) <= 0) {
+ 
+		if (support.dot(direction) <= 0) {
 			return false; // No collision
 		}
 		simplex.push_front(support);
+		
 
 		if (NextSimplex(simplex, direction)) {
 			return true; // Collision detected
