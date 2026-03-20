@@ -1,5 +1,7 @@
 #include <vector>
 #include <iostream>
+#include "GJK.h"
+#include <stdexcept>
 
 #define OCT3_TOP_LEFT_FRONT 0
 #define OCT3_TOP_RIGHT_FRONT 1
@@ -16,7 +18,10 @@ struct Oct3Node {
 	std::vector<Oct3Node*> children;
 	std::vector<float>  topLeftFront;
 	std::vector<float>  bottomRightBack;
+	float volume = 0.0f;
 	int numChildren = 0;
+	int index = -1;
+	MeshCollider collider;
 
 	Oct3Node(float x, float y, float z, Oct3Node* parent) : pos{ x, y, z }, parent(parent) {
 		children.resize(8);
@@ -24,29 +29,44 @@ struct Oct3Node {
 	Oct3Node(float topLeftFrontX, float topLeftFrontY, float topLeftFrontZ, float bottomRightBackX, float bottomRightBackY, float bottomRightBackZ, Oct3Node* parent)
 		: parent(parent), topLeftFront({ topLeftFrontX, topLeftFrontY, topLeftFrontZ }), bottomRightBack({ bottomRightBackX, bottomRightBackY, bottomRightBackZ })
 	{
+		this->volume = (bottomRightBackX - topLeftFrontX) * (bottomRightBackY - topLeftFrontY) * (bottomRightBackZ - topLeftFrontZ);
 		children.resize(8);
+	}
+
+	MeshCollider getCollider() const {
+		return collider;
+	}
+
+	const std::vector<vec3>& getColliderVertices() const {
+		return collider.getVertices();
+	}
+
+	void setColliderVertices(const std::vector<vec3>* vertices) {
+		collider.setVertices(vertices);
+	}
+
+	void setVolume(float volume) {
+		this->volume = volume;
 	}
 
 	void add_child(Oct3Node* child, int index) {
 		child->parent = this;
+		child->index = index;
 		children[index] = child;
 		numChildren++;
 	}
 
 	void remove_child(Oct3Node* child) {
 		child->parent = nullptr;
-		for (int i = 0; i < children.size(); i++) {
-			if (children[i] == child) {
-				children[i] = nullptr;
-				numChildren--;
-				return;
-			}
-		}
+		children[child->index] = nullptr;
+		numChildren--;
+		child->index = -1;
 	}
 
 	void remove_child(int index) {
 		if (index >= 0 && index < children.size()) {
 			children[index] = nullptr;
+			children[index]->index = -1;
 			numChildren--;
 		}
 	}
@@ -64,6 +84,10 @@ struct Oct3Node {
 
 	bool is_leaf() const {
 		return numChildren == 0;
+	}
+
+	float getVolume() const {
+		return volume;
 	}
 
 	void print() {
@@ -159,6 +183,71 @@ public:
 		return this->search(&node, root);
 	}
 
+	std::vector<Oct3Node*> getCollisions(Oct3Node* node) {
+		std::vector<Oct3Node*> nodes;
+		if (node == nullptr) {
+			return nodes;
+		}
+
+		Oct3Node* parent = node;
+
+		while (node->volume >= parent->volume) {
+			parent = parent->parent;
+		}
+
+		this->getAllIntersectingChildren(parent, nodes, node);
+
+		return nodes;
+	}
+
+	void moveNode(Oct3Node* node) {
+		if (node->parent->containsPoint(node->pos[0], node->pos[1], node->pos[2])) {
+			int i = getIndex(node->parent, node);
+			if(i != node->index) { 
+				node->parent->remove_child(node);
+				insertNode(node->parent, node);
+			}
+		}
+		else {
+			Oct3Node* parent = node->parent;
+			Oct3Node* child = node;
+			if (parent == nullptr) { throw std::runtime_error("Parent of node is nullptr"); }
+			parent->remove_child(node);
+
+			while (!parent->containsPoint(node->pos[0], node->pos[1], node->pos[2]) || parent != nullptr) {
+				if (parent->numChildren == 0) {
+					(parent->parent)->remove_child(parent);
+					child = parent;
+					parent = parent->parent;
+					delete child;
+					child = nullptr;
+				}
+				else {
+					child = parent;
+					parent = parent->parent;
+				}
+			}
+
+			if (parent == nullptr) { 
+				if (child == nullptr) {
+					int multiplier = getHighestBase(max(abs(node->pos[0]), abs(node->pos[1]), abs(node->pos[2])))*100;
+					this->root = new Oct3Node(-multiplier, -multiplier, -multiplier, multiplier, multiplier, multiplier, nullptr);
+					insertNode(root, node);
+				}
+				else {
+					int multiplier = getHighestBase(max(abs(node->pos[0]), abs(node->pos[1]), abs(node->pos[2]))) * 100;
+					parent = new Oct3Node(-multiplier, -multiplier, -multiplier, multiplier, multiplier, multiplier, nullptr);
+					insertToNewRootNode(parent, child);
+					root = parent;
+					insertNode(root, node);
+				}
+			}
+			else {
+				insertNode(parent, node);
+			}
+		}
+	}
+
 private:
 	void deallocate(Oct3Node* n) {
 		std::vector<Oct3Node*>* nodesToDelete = &n->children;
@@ -167,6 +256,92 @@ private:
 				deallocate(child);
 		}
 		delete n;
+	}
+
+	void insertToNewRootNode(Oct3Node* base, Oct3Node* node) {
+		int index = 0;
+		float midX = (base->topLeftFront[0] + base->bottomRightBack[0]) / 2;
+		float midY = (base->topLeftFront[1] + base->bottomRightBack[1]) / 2;
+		float midZ = (base->topLeftFront[2] + base->bottomRightBack[2]) / 2;
+
+		float nodeX = (node->topLeftFront[0] + node->bottomRightBack[0]) / 2;
+		float nodeY = (node->topLeftFront[1] + node->bottomRightBack[1]) / 2;
+		float nodeZ = (node->topLeftFront[2] + node->bottomRightBack[2]) / 2;
+
+
+		if (nodeX < midX) {
+			if (nodeY < midY) {
+				if (nodeZ < midZ) {
+					index = OCT3_TOP_LEFT_FRONT;
+					node->topLeftFront = { base->topLeftFront[0], base->topLeftFront[1], base->topLeftFront[2] };
+					node->bottomRightBack = { midX, midY, midZ };
+				}
+				else {
+					index = OCT3_TOP_LEFT_BACK;
+					node->topLeftFront = { base->topLeftFront[0], base->topLeftFront[1], midZ };
+					node->bottomRightBack = { midX, midY, base->bottomRightBack[2]};
+				}
+			}
+			else {
+				if (nodeZ < midZ) {
+					index = OCT3_BOTTOM_LEFT_FRONT;
+					node->topLeftFront = { base->topLeftFront[0], midY, base->topLeftFront[2] };
+					node->bottomRightBack = { midX, base->bottomRightBack[1], midZ};
+				}
+				else {
+					index = OCT3_BOTTOM_LEFT_BACK;
+					node->topLeftFront = { base->topLeftFront[0], midY, midZ };
+					node->bottomRightBack = { midX, base->bottomRightBack[1], base->bottomRightBack[2]};
+				}
+			}
+		}
+		else {
+			if (nodeY < midY) {
+				if (nodeZ < midZ) {
+					index = OCT3_TOP_RIGHT_FRONT;
+					node->topLeftFront = { midX, base->topLeftFront[1], base->topLeftFront[2] };
+					node->bottomRightBack = { base->bottomRightBack[0], midY, midZ};
+				}
+				else {
+					index = OCT3_TOP_RIGHT_BACK;
+					node->topLeftFront = { midX, base->topLeftFront[1], midZ };
+					node->bottomRightBack = { base->bottomRightBack[0], midY, base->bottomRightBack[2]};
+				}
+			}
+			else {
+				if (nodeZ < midZ) {
+					index = OCT3_BOTTOM_RIGHT_FRONT;
+					node->topLeftFront = { midX, midY, base->topLeftFront[2]};
+					node->bottomRightBack = { base->bottomRightBack[0], base->bottomRightBack[1], midZ};
+				}
+				else {
+					index = OCT3_BOTTOM_RIGHT_BACK;
+					node->topLeftFront = { midX, midY, midZ };
+					node->bottomRightBack = { base->bottomRightBack[0], base->bottomRightBack[1], base->bottomRightBack[2]};
+				}
+			}
+		}
+		
+		base->add_child(node, index);
+	}
+
+	float max(int a, int b, int c) {
+		if (a > b) {
+			return a > c ? a : c;
+		}
+		else {
+			return b > c ? b : c;
+		}
+	}
+
+	int getHighestBase(float num) {
+		int res = 0;
+		num = abs(num);
+		while (num > 1) {
+			res++;
+			num /= 10;
+		}
+		return pow(10, res);
 	}
 
 	int getIndex(Oct3Node* treeNode, Oct3Node* node) {
@@ -290,6 +465,29 @@ private:
 
 		int index = getIndex(treeNode, node);
 		return search(node, treeNode->children[index]);
+	}
+
+	void getAllIntersectingChildren(Oct3Node* node, std::vector<Oct3Node*>& nodes, Oct3Node* skipNode=nullptr) {
+
+		if (node == nullptr) {
+			return;
+		}
+		
+		for (Oct3Node* child : node->children) {
+			if (!child->pos.empty() && child != skipNode) {
+				if (skipNode != nullptr) {
+					if (GJK(child->getCollider(), skipNode->getCollider())) {
+						nodes.push_back(child);
+					}
+				}
+				else {
+					nodes.push_back(child);
+				}
+			}
+			else if(child != nullptr && child->pos.empty()) {
+				getAllIntersectingChildren(child, nodes);
+			}
+		}
 	}
 
 };

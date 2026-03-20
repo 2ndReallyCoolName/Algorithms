@@ -75,7 +75,7 @@ struct vec2 {
 struct Simplex {
 private:
 	std::vector<vec3> points;
-	int size = 0;
+	size_t size = 0;
 public:
 	Simplex() : size(0) {
 		points.resize(4);
@@ -127,14 +127,15 @@ struct Collider {
 
 struct MeshCollider : Collider {
 private:
-	std::vector<vec3> vertices;
+	const std::vector<vec3>* vertices;
 public:
-	MeshCollider(const std::vector<vec3>& vertices) : vertices(vertices) {}
+	MeshCollider() = default;
+	MeshCollider(const std::vector<vec3>* vertices) : vertices(vertices) {}
 
 	vec3 FindFurthestPoint(vec3 direction) const override {
 		vec3 furthestPoint;
 		float maxDot = -FLT_MAX;
-		for (const vec3& vertex : vertices) {
+		for (const vec3& vertex : *vertices) {
 			float dot = vertex.dot(direction);
 			if (dot > maxDot) {
 				maxDot = dot;
@@ -142,6 +143,14 @@ public:
 			}
 		}
 		return furthestPoint;
+	}
+
+	const std::vector<vec3>& getVertices() const {
+		return *vertices;
+	}
+
+	void setVertices(const std::vector<vec3>* vertices) {
+		this->vertices = vertices;
 	}
 };
 
