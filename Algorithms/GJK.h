@@ -127,7 +127,7 @@ struct Collider {
 
 struct MeshCollider : Collider {
 private:
-	const std::vector<vec3>* vertices;
+	const std::vector<vec3>* vertices = nullptr;
 public:
 	MeshCollider() = default;
 	MeshCollider(const std::vector<vec3>* vertices) : vertices(vertices) {}

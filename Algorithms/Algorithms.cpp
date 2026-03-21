@@ -2,28 +2,13 @@
 //
 
 #include <iostream>
-#include "GJK.h"
+#include "OctTree_Test.h"
 
 
 
 int main()
 {
-	std::vector<vec3> verticesA = { {-1, 1, 0}, {-2, 1, 0}, {-1, -1, 0}, {-2, -1, 0}, {-1, 1, 1}, {-2, 1, 1}, {-1, -1, 1}, {-2, -1, 1} };
-	std::vector<vec3> verticesB = { {-1.5, 0, 0.5}, {0, 1.5, 0.5}, {0, -1.5, 0.5}, {1.5, 0, 0.5},  {-1.5, 0, -0.5}, {0, 1.5, -0.5}, {0, -1.5, -0.5}, {1.5, 0, -0.5} };
-	MeshCollider colliderA(&verticesA);
-	MeshCollider colliderB(&verticesB);
-
-
-	GJK(colliderA, colliderB) ? std::cout << "Colliders intersect" << std::endl : std::cout << "Colliders do not intersect" << std::endl;
-
-	verticesA = { {-1, 1, 0}, {-2, 1, 0}, {-1, -1, 0}, {-2, -1, 0}, {-1, 1, 1}, {-2, 1, 1}, {-1, -1, 1}, {-2, -1, 1} };
-	verticesB = { {-0.5, 0, 0.5}, {0, 1.5, 0.5}, {0, -1.5, 0.5}, {1.5, 0, 0.5},  {-0.5, 0, -0.5}, {0, 1.5, -0.5}, {0, -1.5, -0.5}, {1.5, 0, -0.5} };
-
-	colliderA = MeshCollider(&verticesA);
-	colliderB = MeshCollider(&verticesB);
-
-	GJK(colliderA, colliderB) ? std::cout << "Colliders intersect" << std::endl : std::cout << "Colliders do not intersect" << std::endl;
-
+	Test();
 	return 0;
 }
 
