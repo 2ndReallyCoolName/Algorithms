@@ -105,13 +105,37 @@ void Test() {
 	std::vector<Oct3Node*> nodes;
 	std::vector<std::vector<vec3>> vertices;
 
-	CreateNodes(&nodes, vertices, 2000);
+	CreateNodes(&nodes, vertices, 20);
 
+	std::cout << "Inserting nodes" << std::endl;
 	for (Oct3Node* node : nodes) {
 		OctTreeInsert(&tree, node);
 	}
+
+	std::cout << "Searching nodes" << std::endl;
+	for (Oct3Node* node : nodes) {
+		OctTreeSearch(&tree, node);
+	}
 	
+	std::cout << "Drawing nodes" << std::endl;
 	tree.draw();
+
+	std::vector<Oct3Node*> nodesCopy = nodes;
+
+	/*for (Oct3Node* node : nodes) {
+		OctTreeSearch(&tree, node);
+	}*/
+
+	tree.printTree();
+	std::cout << "===================================================================================" << std::endl;
+	OctTreeRemove(&tree, nodes[5]);
+	std::cout << "===================================================================================" << std::endl;
+	OctTreeSearch(&tree, nodes[5]);
+	OctTreeRemove(&tree, nodes[10]);
+	OctTreeSearch(&tree, nodes[10]);
+
+	//tree.draw();
+
 	/*
 	for (Oct3Node* node : nodes) {
 		OctTreeSearch(t, node);
@@ -125,5 +149,9 @@ void Test() {
 	for (Oct3Node* node : nodes) {
 		OctTreeRemove(t, node);
 	}*/
+
+	for (Oct3Node* node : nodes) {
+		delete node;
+	}
 
 }

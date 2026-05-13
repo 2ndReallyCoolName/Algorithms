@@ -15,12 +15,13 @@
 struct Oct3Node {
 	std::vector<float> pos;
 	Oct3Node* parent;
-	std::vector<Oct3Node*> children;
+	std::vector<Oct3Node> children;
 	std::vector<float>  topLeftFront;
 	std::vector<float>  bottomRightBack;
 	float volume = 0.0f;
 	int numChildren = 0;
 	int index = -1;
+	int depth = 0;
 	MeshCollider collider;
 
 	Oct3Node(float x, float y, float z, Oct3Node* parent) : pos{ x, y, z }, parent(parent) {
@@ -31,6 +32,13 @@ struct Oct3Node {
 	{
 		this->volume = (bottomRightBackX - topLeftFrontX) * (bottomRightBackY - topLeftFrontY) * (bottomRightBackZ - topLeftFrontZ);
 		children.resize(8);
+	}
+
+	Oct3Node(Oct3Node* parent) : parent(parent) {}
+	Oct3Node() {}
+
+	bool nullOct3Node() {
+		return pos.empty() && topLeftFront.empty() && bottomRightBack.empty() && children.empty();
 	}
 
 	MeshCollider getCollider() const {
@@ -52,22 +60,42 @@ struct Oct3Node {
 	void add_child(Oct3Node* child, int index) {
 		child->parent = this;
 		child->index = index;
+		child->depth = this->depth + 1;
+		children[index] = *child;
+		numChildren++;
+	}
+
+	void add_child(Oct3Node&& child, int index) {
+		child.parent = this;
+		child.index = index;
+		child.depth = this->depth + 1;
 		children[index] = child;
+		numChildren++;
+	}
+
+	void add_child(Oct3Node&& child) {
+		child.parent = this;
+		child.index = numChildren;
+		child.depth = this->depth + 1;
+		if (numChildren >= children.size()) {
+			children.resize(children.size() * 2);
+		}
+		children[numChildren] = child;
 		numChildren++;
 	}
 
 	void remove_child(Oct3Node* child) {
 		child->parent = nullptr;
-		children[child->index] = nullptr;
+		children[child->index] = Oct3Node(this);
 		numChildren--;
 		child->index = -1;
 	}
 
 	void remove_child(int index) {
 		if (index >= 0 && index < children.size()) {
-			children[index]->parent = nullptr;
-			children[index]->index = -1;
-			children[index] = nullptr;
+			children[index].parent = nullptr;
+			children[index].index = -1;
+			children[index] = Oct3Node(this);
 			numChildren--;
 		}
 	}
@@ -114,7 +142,7 @@ struct Oct3Node {
 				std::cout << "  bottomRightBack: (" << parent->bottomRightBack[0] << ", " << parent->bottomRightBack[1] << ", " << parent->bottomRightBack[2] << ") " << std::endl;
 				std::cout << "  num children: " << parent->numChildren << std::endl;
 				for (int i = 0; i < parent->children.size(); i++) {
-					if (parent->children[i] == this) {
+					if (&parent->children[i] == this) {
 						std::cout << "  child pos: " << i <<  std::endl;
 						break;
 					}
@@ -127,36 +155,37 @@ struct Oct3Node {
 
 		std::cout << "------------------" << std::endl;
 		
-		for(Oct3Node* child : children) {
-			if (child != nullptr)
-				child->print();
+		for(Oct3Node& child : children) {
+			if (!child.nullOct3Node())
+				child.print();
 		}
 	}
 };
 
 class OctTree {
 private:
-	Oct3Node* root;
+	Oct3Node root;
+	short maxDepth = 0;
 
 public:
-	OctTree(float topLeftFrontX, float topLeftFrontY, float topLeftFrontZ, float bottomRightBackX, float bottomRightBackY, float bottomRightBackZ) {
-		root =  new Oct3Node(topLeftFrontX, topLeftFrontY, topLeftFrontZ, bottomRightBackX, bottomRightBackY, bottomRightBackZ, nullptr);
+	OctTree(float topLeftFrontX, float topLeftFrontY, float topLeftFrontZ, float bottomRightBackX, float bottomRightBackY, float bottomRightBackZ, short maxDepth=5) : maxDepth(maxDepth) {
+		root =  Oct3Node(topLeftFrontX, topLeftFrontY, topLeftFrontZ, bottomRightBackX, bottomRightBackY, bottomRightBackZ, nullptr);
 	}
 
-	~OctTree() {
+	/*~OctTree() {
 		deallocate(root);
-	}
+	}*/
 
 	void insert(float x, float y, float z) {
-		insert_root_helper(new Oct3Node(x, y, z, nullptr));
+		insert_root_helper(Oct3Node(x, y, z, nullptr));
 	}
 
 	void insert(std::vector<float>& point) {
-		insert_root_helper(new Oct3Node(point[0], point[1], point[2], nullptr));
+		insert_root_helper(Oct3Node(point[0], point[1], point[2], nullptr));
 	}
 
 	void insert(Oct3Node* node) {
-		insert_root_helper(node);
+		insert_root_helper(std::move(*node));
 	}
 
 	void remove(float x, float y, float z) {
@@ -187,17 +216,17 @@ public:
 	}
 
 	void printTree() {
-		root->print();
+		root.print();
 	}
 
 	Oct3Node* search(Oct3Node* node) {
-		return this->search(node, root);
+		return this->search(node, &root);
 	}
 
 	Oct3Node* search(std::vector<float> *p) {
 		Oct3Node node(p->at(0), p->at(1), p->at(2), nullptr);
 
-		return this->search(&node, root);
+		return this->search(&node, &root);
 	}
 
 	std::vector<Oct3Node*> getCollisions(Oct3Node* node) {
@@ -219,6 +248,10 @@ public:
 
 	void moveNode(Oct3Node* node) {
 		if (node->parent->containsPoint(node->pos[0], node->pos[1], node->pos[2])) {
+			if (node->parent->depth == this->maxDepth) {
+				return;
+			}
+
 			int i = getIndex(node->parent, node);
 			if(i != node->index) { 
 				node->parent->remove_child(node);
@@ -234,9 +267,7 @@ public:
 			while (!parent->containsPoint(node->pos[0], node->pos[1], node->pos[2]) || parent != nullptr) {
 				if (parent->numChildren == 0) {
 					(parent->parent)->remove_child(parent);
-					child = parent;
 					parent = parent->parent;
-					delete child;
 					child = nullptr;
 				}
 				else {
@@ -248,8 +279,8 @@ public:
 			if (parent == nullptr) { 
 				if (child == nullptr) {
 					int multiplier = getHighestBase(max(abs(node->pos[0]), abs(node->pos[1]), abs(node->pos[2])))*100;
-					this->root = new Oct3Node(-multiplier, -multiplier, -multiplier, multiplier, multiplier, multiplier, nullptr);
-					insertNode(root, node);
+					this->root = Oct3Node(-multiplier, -multiplier, -multiplier, multiplier, multiplier, multiplier, nullptr);
+					insertNode(&root, node);
 				}
 				else {
 					insert_root_helper(node);
@@ -262,16 +293,18 @@ public:
 	}
 
 	void draw() {
-		int z = (int)(root->bottomRightBack[2] - root->topLeftFront[2]);
-		int y = (int)(root->bottomRightBack[1] - root->topLeftFront[1]);
-		int x = (int)(root->bottomRightBack[0] - root->topLeftFront[0]);
+		int z = (int)(root.bottomRightBack[2] - root.topLeftFront[2]);
+		int y = (int)(root.bottomRightBack[1] - root.topLeftFront[1]);
+		int x = (int)(root.bottomRightBack[0] - root.topLeftFront[0]);
 
 		std::vector<std::vector<std::vector<char>>> board(z, 
 			std::vector<std::vector<char>>(y, 
 				std::vector<char>(x, ' ')));
 
+		std::cout << "draw" << std::endl;
+		std::cout << root.topLeftFront.size() << std::endl;
 		// draw yx plane
-		drawHelper(root, &board, root->topLeftFront[0], root->topLeftFront[1], root->topLeftFront[2]);
+		drawHelper(&root, &board, root.topLeftFront[0], root.topLeftFront[1], root.topLeftFront[2]);
 		std::vector<std::vector<char>> board2(y, std::vector<char>(x, ' '));
 
 		for (int i = 0; i < board.size(); i++) {
@@ -301,7 +334,7 @@ public:
 private:
 
 	void drawHelper(Oct3Node* node, std::vector<std::vector<std::vector<char>>>* board, int tx, int ty, int tz) {
-		if (node == nullptr) {
+		if (node->nullOct3Node()) {
 			return;
 		}
 
@@ -344,35 +377,35 @@ private:
 			(*board)[(int)node->pos[2] - tz][(int)node->pos[1] - ty][(int)node->pos[0] - tx] = 'X';
 		}
 
-		for (Oct3Node* child : node->children) {
-			drawHelper(child, board, tx, ty, tz);
+		for (Oct3Node& child : node->children) {
+			drawHelper(&child, board, tx, ty, tz);
 		}
 	}
 
-	void insert_root_helper(Oct3Node* node) {
-		if (root->containsPoint(node->pos[0], node->pos[1], node->pos[2])) {
-			insertNode(root, node);
+	void insert_root_helper(Oct3Node&& node) {	
+		if (root.containsPoint(node.pos[0], node.pos[1], node.pos[2])) {
+			insertNode(&root, &node);
 		}
 		else {
-			int multiplier = getHighestBase(max(abs(node->pos[0]), abs(node->pos[1]), abs(node->pos[2]))) * 100;
-			Oct3Node* newRoot = new Oct3Node(-multiplier, -multiplier, -multiplier, multiplier, multiplier, multiplier, nullptr);
-			root->parent = newRoot;
+			int multiplier = getHighestBase(max(abs(node.pos[0]), abs(node.pos[1]), abs(node.pos[2]))) * 100;
+			Oct3Node newRoot = Oct3Node(-multiplier, -multiplier, -multiplier, multiplier, multiplier, multiplier, nullptr);
+			root.parent = &newRoot;
 
-			newRoot->add_child(root, getIntermediateNodeIndex(newRoot, root));
+			newRoot.add_child(&root, getIntermediateNodeIndex(&newRoot, &root));
 			root = newRoot;
-			resizeTree(root);
-			insertNode(root, node);
+			resizeTree(&root);
+			insertNode(&root, &node);
 		}
 	}
 
-	void deallocate(Oct3Node* n) {
+	/*void deallocate(Oct3Node* n) {
 		std::vector<Oct3Node*>* nodesToDelete = &n->children;
 		for (Oct3Node* child : *nodesToDelete) {
 			if(child != nullptr)
 				deallocate(child);
 		}
 		delete n;
-	}
+	}*/
 
 	void resizeTree(Oct3Node* node) {
 		if (node->is_leaf()) {
@@ -384,57 +417,57 @@ private:
 		float midY = (node->topLeftFront[1] + node->bottomRightBack[1]) / 2;
 		float midZ = (node->topLeftFront[2] + node->bottomRightBack[2]) / 2;
 
-		std::vector<Oct3Node*> copyChildren = node->children;
+		std::vector<Oct3Node> copyChildren = node->children;
 
-		for (Oct3Node* child : node->children) {
-			if (child != nullptr){
-				if (child->is_intermediate()) {
-					index = getIntermediateNodeIndex(root, node);
-					copyChildren[node->index] = nullptr;
-					copyChildren[index] = node;
+		for (Oct3Node& child : node->children) {
+			if (!child.nullOct3Node()){
+				if (child.is_intermediate()) {
+					index = getIntermediateNodeIndex(node, &child);
+					copyChildren[node->index] = Oct3Node();
+					copyChildren[index] = child;
 
 					switch (index)
 					{
 					case OCT3_TOP_LEFT_FRONT:
-						node->topLeftFront = { node->topLeftFront[0], node->topLeftFront[1], node->topLeftFront[2] };
-						node->bottomRightBack = { midX, midY, midZ };
+						child.topLeftFront = { child.topLeftFront[0], child.topLeftFront[1], child.topLeftFront[2] };
+						child.bottomRightBack = { midX, midY, midZ };
 						break;
 					case OCT3_TOP_RIGHT_FRONT:
-						node->topLeftFront = { node->topLeftFront[0], node->topLeftFront[1], midZ };
-						node->bottomRightBack = { midX, midY, node->bottomRightBack[2] };
+						child.topLeftFront = { child.topLeftFront[0], child.topLeftFront[1], midZ };
+						child.bottomRightBack = { midX, midY, child.bottomRightBack[2] };
 						break;
 					case OCT3_BOTTOM_LEFT_FRONT:
-						node->topLeftFront = { node->topLeftFront[0], midY, node->topLeftFront[2] };
-						node->bottomRightBack = { midX, node->bottomRightBack[1], midZ };
+						child.topLeftFront = { child.topLeftFront[0], midY, child.topLeftFront[2] };
+						child.bottomRightBack = { midX, child.bottomRightBack[1], midZ };
 						break;
 					case OCT3_BOTTOM_RIGHT_FRONT:
-						node->topLeftFront = { midX, midY, node->topLeftFront[2] };
-						node->bottomRightBack = { node->bottomRightBack[0], node->bottomRightBack[1], midZ };
+						child.topLeftFront = { midX, midY, child.topLeftFront[2] };
+						child.bottomRightBack = { child.bottomRightBack[0], child.bottomRightBack[1], midZ };
 						break;
 					case OCT3_TOP_LEFT_BACK:
-						node->topLeftFront = { node->topLeftFront[0], node->topLeftFront[1], midZ };
-						node->bottomRightBack = { midX, midY, node->bottomRightBack[2] };
+						child.topLeftFront = { child.topLeftFront[0], child.topLeftFront[1], midZ };
+						child.bottomRightBack = { midX, midY, child.bottomRightBack[2] };
 						break;
 					case OCT3_TOP_RIGHT_BACK:
-						node->topLeftFront = { midX, node->topLeftFront[1], midZ };
-						node->bottomRightBack = { node->bottomRightBack[0], midY, node->bottomRightBack[2] };
+						child.topLeftFront = { midX, child.topLeftFront[1], midZ };
+						child.bottomRightBack = { child.bottomRightBack[0], midY, child.bottomRightBack[2] };
 						break;
 					case OCT3_BOTTOM_LEFT_BACK:
-						node->topLeftFront = { node->topLeftFront[0], midY, midZ };
-						node->bottomRightBack = { midX, node->bottomRightBack[1], node->bottomRightBack[2] };
+						child.topLeftFront = { child.topLeftFront[0], midY, midZ };
+						child.bottomRightBack = { midX, child.bottomRightBack[1], child.bottomRightBack[2] };
 						break;
 					case OCT3_BOTTOM_RIGHT_BACK:
-						node->topLeftFront = { midX, midY, midZ };
-						node->bottomRightBack = { node->bottomRightBack[0], node->bottomRightBack[1], node->bottomRightBack[2] };
+						child.topLeftFront = { midX, midY, midZ };
+						child.bottomRightBack = { child.bottomRightBack[0], child.bottomRightBack[1], child.bottomRightBack[2] };
 						break;
 					default:
 						break;
 					}
 				}
-				resizeTree(child);
-				node->children = copyChildren;
+				resizeTree(&child);
 			}
 		}
+		node->children = copyChildren;
 	}
 
 	int getIntermediateNodeIndex(Oct3Node* base, Oct3Node* node){
@@ -557,7 +590,6 @@ private:
 		Oct3Node* parent = node->parent;
 		while (parent != nullptr) {
 			parent->remove_child(node);
-			delete node;
 			if (parent->numChildren > 0) {
 				break;
 			}
@@ -570,47 +602,51 @@ private:
 	void insertNode(Oct3Node* treeNode, Oct3Node* node) {
 		int index = getIndex(treeNode, node);
 
-		if (treeNode->children[index] == nullptr) {
+		if (treeNode->children[index].nullOct3Node()) {
 			treeNode->add_child(node, index);
+		}
+		else if (treeNode->depth == maxDepth) {
+			treeNode->add_child(node);
 		} else {
-			if (!treeNode->children[index]->pos.empty()) {
-				Oct3Node* existingNode = treeNode->children.at(index);
+			if (!treeNode->children[index].pos.empty()) {
+				Oct3Node existingNode = treeNode->children.at(index);
 				treeNode->remove_child(index);
 				float midX = (treeNode->topLeftFront[0] + treeNode->bottomRightBack[0]) / 2;
 				float midY = (treeNode->topLeftFront[1] + treeNode->bottomRightBack[1]) / 2;
 				float midZ = (treeNode->topLeftFront[2] + treeNode->bottomRightBack[2]) / 2;
+
 				switch (index)
 				{
 				case OCT3_TOP_LEFT_FRONT:
-					treeNode->add_child(new Oct3Node(treeNode->topLeftFront[0], treeNode->topLeftFront[1], treeNode->topLeftFront[2], midX, midY, midZ, treeNode), index);
+					treeNode->add_child(Oct3Node(treeNode->topLeftFront[0], treeNode->topLeftFront[1], treeNode->topLeftFront[2], midX, midY, midZ, treeNode), index);
 					break;
 				case OCT3_TOP_RIGHT_FRONT:
-					treeNode->add_child(new Oct3Node(midX, treeNode->topLeftFront[1], treeNode->topLeftFront[2], treeNode->bottomRightBack[0], midY, midZ, treeNode), index);
+					treeNode->add_child(Oct3Node(midX, treeNode->topLeftFront[1], treeNode->topLeftFront[2], treeNode->bottomRightBack[0], midY, midZ, treeNode), index);
 					break;
 				case OCT3_BOTTOM_LEFT_FRONT:
-					treeNode->add_child(new Oct3Node(treeNode->topLeftFront[0], midY, treeNode->topLeftFront[2], midX, treeNode->bottomRightBack[1], midZ, treeNode), index);
+					treeNode->add_child(Oct3Node(treeNode->topLeftFront[0], midY, treeNode->topLeftFront[2], midX, treeNode->bottomRightBack[1], midZ, treeNode), index);
 					break;
 				case OCT3_BOTTOM_RIGHT_FRONT:
-					treeNode->add_child(new Oct3Node(midX, midY, treeNode->topLeftFront[2], treeNode->bottomRightBack[0], treeNode->bottomRightBack[1], midZ, treeNode), index);
+					treeNode->add_child(Oct3Node(midX, midY, treeNode->topLeftFront[2], treeNode->bottomRightBack[0], treeNode->bottomRightBack[1], midZ, treeNode), index);
 					break;
 				case OCT3_TOP_LEFT_BACK:
-					treeNode->add_child(new Oct3Node(treeNode->topLeftFront[0], treeNode->topLeftFront[1], midZ, midX, midY, treeNode->bottomRightBack[2], treeNode), index);
+					treeNode->add_child(Oct3Node(treeNode->topLeftFront[0], treeNode->topLeftFront[1], midZ, midX, midY, treeNode->bottomRightBack[2], treeNode), index);
 					break;
 				case OCT3_TOP_RIGHT_BACK:
-					treeNode->add_child(new Oct3Node(midX, treeNode->topLeftFront[1], midZ, treeNode->bottomRightBack[0], midY, treeNode->bottomRightBack[2], treeNode), index);
+					treeNode->add_child(Oct3Node(midX, treeNode->topLeftFront[1], midZ, treeNode->bottomRightBack[0], midY, treeNode->bottomRightBack[2], treeNode), index);
 					break;
 				case OCT3_BOTTOM_LEFT_BACK:
-					treeNode->add_child(new Oct3Node(treeNode->topLeftFront[0], midY, midZ, midX, treeNode->bottomRightBack[1], treeNode->bottomRightBack[2], treeNode), index);
+					treeNode->add_child(Oct3Node(treeNode->topLeftFront[0], midY, midZ, midX, treeNode->bottomRightBack[1], treeNode->bottomRightBack[2], treeNode), index);
 					break;
 				case OCT3_BOTTOM_RIGHT_BACK:
-					treeNode->add_child(new Oct3Node(midX, midY, midZ, treeNode->bottomRightBack[0], treeNode->bottomRightBack[1], treeNode->bottomRightBack[2], treeNode), index);
+					treeNode->add_child(Oct3Node(midX, midY, midZ, treeNode->bottomRightBack[0], treeNode->bottomRightBack[1], treeNode->bottomRightBack[2], treeNode), index);
 					break;
 				default:
 					break;
 				}
-				insertNode(treeNode->children[index], existingNode);
+				insertNode(&treeNode->children[index], &existingNode);
 			}
-			insertNode(treeNode->children[index], node);
+			insertNode(&treeNode->children[index], node);
 		}
 	}
 
@@ -620,12 +656,23 @@ private:
 		}
 		if (treeNode->pos == node->pos) {
 			return treeNode;
-		}else if(!treeNode->pos.empty()) {
+		}else if(treeNode->nullOct3Node()) {
+			return nullptr;
+		}
+		else if (treeNode->depth == maxDepth) {
+			for (Oct3Node& child : treeNode->children) {
+				if (child.pos == node->pos) {
+					return &child;
+				}
+			}
 			return nullptr;
 		}
 
+		//std::cout << "search:" << treeNode->pos.size() << treeNode->pos.empty() << std::endl;
+		//treeNode->print();
+
 		int index = getIndex(treeNode, node);
-		return search(node, treeNode->children[index]);
+		return search(node, &treeNode->children[index]);
 	}
 
 	void getAllIntersectingChildren(Oct3Node* node, std::vector<Oct3Node*>& nodes, Oct3Node* skipNode=nullptr) {
@@ -634,19 +681,19 @@ private:
 			return;
 		}
 		
-		for (Oct3Node* child : node->children) {
-			if (!child->pos.empty() && child != skipNode) {
+		for (Oct3Node& child : node->children) {
+			if (!child.pos.empty() && &child != skipNode) {
 				if (skipNode != nullptr) {
-					if (GJK(child->getCollider(), skipNode->getCollider())) {
-						nodes.push_back(child);
+					if (GJK(child.getCollider(), skipNode->getCollider())) {
+						nodes.push_back(&child);
 					}
 				}
 				else {
-					nodes.push_back(child);
+					nodes.push_back(&child);
 				}
 			}
-			else if(child != nullptr && child->pos.empty()) {
-				getAllIntersectingChildren(child, nodes);
+			else if(child.nullOct3Node() && child.pos.empty()) {
+				getAllIntersectingChildren(&child, nodes);
 			}
 		}
 	}
